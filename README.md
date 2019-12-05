@@ -9,7 +9,7 @@ If you want it to do other functions, grab the code and go for it.
 ## Usage
 ```
 $ ./xbsjsonedit -h
-usage: xbsjsonedit [-h] Infile
+usage: xbsjsonedit [-h] [--dump] Infile
 
 xBrowserSync json backup editor
 
@@ -18,6 +18,7 @@ positional arguments:
 
 optional arguments:
   -h, --help  show this help message and exit
+  --dump      Dump bookmark hierarchy (redirect to less or a file)
 ```
 
 ## Internal command menu
@@ -26,12 +27,19 @@ $ ./xbsjsonedit xBrowserSyncBackup_201811232150.json
 
 ---------------------------------------------------------------------
 Options:
-  s:  Search term entry (currently <__NONE__>)
-  t:  List   search matches
-  T:  Delete search matches
+  p:  Print the bookmarks tree hierarchy
+
+  s:  Search term entry (currently <weather>)
+  t:  List   bookmark search matches
+  T:  Delete bookmark search matches
+  g:  List   folder names search matches
+  G:  Delete folder names search matches
 
   d:  List   duplicate URLs
   D:  Delete duplicate URLs
+
+  f:  List   duplicate folders
+  F:  Delete duplicate folders
 
   x:  List   tags on folders (only leaf nodes should have tags)
   X:  Delete tags on folders
@@ -42,17 +50,21 @@ Options:
   w:  Write out the bookmarks data to a file
   q:  Quit/exit (Do a Write first!)
 
+
 Enter option: 
 ```
 ## Usage notes
-Four modes are supported Listing/Deleting based on
-- A search string
+Five modes are supported Listing/Deleting based on:
+- A search string in bookmarks or folders
 - Duplicate URLs in bookmarks - such as the same URL existing in two or more folders
+- Duplicate folder names
 - Folders that have tags - there is no value for folders having tags
 - Empty folders - which may arise if all bookmarks were deleted from a folder
 
-A lower case letter `t/d/x/y` will list the offenders, while an upper case letter 
-`T/D/X/Y` will allow for selective deletes of the offenders. The lower case List operation
+The Print function prints the full list of bookmarks in folder hierarchical form, listing the ID number and Title of each folder and bookmark.  The `--dump` switch may be used for getting a good visual dump of the bookmarks in less or an editor for reference while using the interactive mode.
+
+A lower case letter `t/g/d/f/x/y` will list the offenders, while an upper case letter 
+`T/G/D/F/X/Y` will allow for selective deletes of the offenders. The lower case List operation
 need not be run before running the upper case Delete operation.
 Delete functions support individual bookmark selection, or all that match the selection mode.
 You cannot do any damage to the original bookmark file during a session, so experiment and poke
@@ -68,15 +80,11 @@ You may want to write out intermediate editing results to save work done up to t
 The output format is "pretty printed" json for readability, and is accepted by the 
 xBrowserSync app Restore function via copy/paste.  Note: xBrowserSync will allow you to restore 
 to (blast) your current
-syncID, so you may want to Disable Sync, then create a new sync before restoring the modified bookmarks.
+syncID, so you may want to Disable Sync, then create a new sync before restoring the modified bookmarks. **NOTE** that tags are not restored if sync is disabled.  To recover, simply enable sync and do another restore.
 
 
 
 ## Known issues:
-- This code was developed on Python 2.7.10 on Windows, and exercised on Linux.  It is known broken 
-on Python 3.
-- The xBrowserSync Backup function appears to dump out Latin-1 encoding, not UTF-8.  The 
-Write command from this tool outputs UTF-8, which seems to Restore without error in xBrowserSync, 
-but effectively garbages up the bookmark title text for non-ASCII bookmarks.
+- This code only works with Python 3.  Development and testing was done on Linux with Python 3.7.3.
 
 

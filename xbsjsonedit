@@ -4,16 +4,13 @@
 #==========================================================
 #
 desc = """xBrowserSync json backup editor"""
-#  Chris Nelson, November 2018
+#  Chris Nelson  2018 - 2019
 #
+# 191205    Updated to xbrowsersync v1.5 and Python 3.x ONLY
 # 181128    New
 #
 # Issues, and changes pending
-#   This code was developed on Python 2.7.10 on Windows, and exercised on Linux.  
-#		It is known broken on Python 3.
-#   The xBrowserSync Backup function appears to dump out Latin-1 encoding, not UTF-8.  The Write command
-#       from this tool outputs UTF-8, which seems to Restore without error in xBrowserSync, but effectively
-#       garbages up the bookmark text for non-ASCII bookmarks.
+#   None
 #   
 #==========================================================
 
@@ -22,6 +19,7 @@ import os.path
 import json
 import codecs
 import sys
+import io
 
 
 # Configs / Constants
@@ -32,6 +30,7 @@ NONE_SEARCH = "__NONE__"
 
 # Global items
 url_dict = {}
+folder_dict = {}
 
 
 def main():
@@ -40,15 +39,16 @@ def main():
     global do_all
     global json_dict
     global url_dict
+    global folder_dict
     
-    # Using latin-1 encoding so that the raw bytes are accepted as they are.
-##    with codecs.open(args.Infile, encoding="latin-1") as json_data:
-##        json_dict = json.load(json_data)
-    with open(args.Infile) as json_data:
-        json_dict = json.load(json_data, encoding="latin-1")
+    with io.open(args.Infile, encoding='utf8', errors="replace") as json_data:
+        json_dict = json.load(json_data)
 
     term = NONE_SEARCH
 
+    if args.dump:
+        digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="printtree")
+        exit()
 
     while (1):
         match_cnt = 0
@@ -58,12 +58,19 @@ def main():
         print ("""
 ---------------------------------------------------------------------
 Options:
+  p:  Print the bookmarks tree hierarchy
+
   s:  Search term entry (currently <{}>)
-  t:  List   search matches
-  T:  Delete search matches
+  t:  List   bookmark search matches
+  T:  Delete bookmark search matches
+  g:  List   folder names search matches
+  G:  Delete folder names search matches
 
   d:  List   duplicate URLs
   D:  Delete duplicate URLs
+
+  f:  List   duplicate folders
+  F:  Delete duplicate folders
 
   x:  List   tags on folders (only leaf nodes should have tags)
   X:  Delete tags on folders
@@ -77,55 +84,74 @@ Options:
         
         select = prompt("Enter option: ")
 
-        if select == 's':
+        if select == 'p':
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="printtree")
+
+        elif select == 's':
             term = prompt("Search for (empty to clear search term): ").lower()
             if term == "":
                 term = NONE_SEARCH
         elif select == 't':
-            digin(parent=json_dict["xBrowserSync"]["bookmarks"], parent_id="", path="/", search_term=term, operation="search")
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term=term, operation="search")
             print ("\nMatches: {}\n".format(match_cnt))
         elif select == 'T':
-            digin(parent=json_dict["xBrowserSync"]["bookmarks"], parent_id="", path="/", search_term=term, operation="search", commit=True)
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term=term, operation="search", commit=True)
+            delete_items ()  # Do the queued deletes
+            print ("\nMatches: {}  Deletes: {}\n".format(match_cnt, change_cnt))
+        elif select == 'g':
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term=term, operation="SearchFolders")
+            print ("\nMatches: {}\n".format(match_cnt))
+        elif select == 'G':
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term=term, operation="SearchFolders", commit=True)
             delete_items ()  # Do the queued deletes
             print ("\nMatches: {}  Deletes: {}\n".format(match_cnt, change_cnt))
 
-
         elif select == 'd':
-            digin(parent=json_dict["xBrowserSync"]["bookmarks"], parent_id="", path="/", search_term="", operation="DupURLs")
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="DupURLs")
             dup_urls()
             url_dict = {}
             print ("\nMatches: {}\n".format(match_cnt))
         elif select == 'D':
-            digin(parent=json_dict["xBrowserSync"]["bookmarks"], parent_id="", path="/", search_term="", operation="DupURLs")
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="DupURLs")
             dup_urls(commit=True)
             url_dict = {}
             delete_items ()
             print ("\nMatches: {}  Deletes: {}\n".format(match_cnt, change_cnt))
 
-
-        elif select == 'x':
-            digin(parent=json_dict["xBrowserSync"]["bookmarks"], parent_id="", path="/", search_term="", operation="FolderTags")
+        elif select == 'f':
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="DupFolders")
+            dup_folders()
+            folder_dict = {}
             print ("\nMatches: {}\n".format(match_cnt))
-        elif select == 'X':
-            digin(parent=json_dict["xBrowserSync"]["bookmarks"], parent_id="", path="/", search_term="", operation="FolderTags", commit=True)
-            print ("\nMatches: {}  Deletes: {}\n".format(match_cnt, change_cnt))
-
-
-        elif select == 'y':
-            digin(parent=json_dict["xBrowserSync"]["bookmarks"], parent_id="", path="/", search_term="", operation="EmptyFolders")
-            print ("\nMatches: {}\n".format(match_cnt))
-        elif select == 'Y':
-            digin(parent=json_dict["xBrowserSync"]["bookmarks"], parent_id="", path="/", search_term="", operation="EmptyFolders", commit=True)
+        elif select == 'F':
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="DupFolders")
+            dup_folders(commit=True)
+            folder_dict = {}
             delete_items ()
             print ("\nMatches: {}  Deletes: {}\n".format(match_cnt, change_cnt))
 
+        elif select == 'x':
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="FolderTags")
+            print ("\nMatches: {}\n".format(match_cnt))
+        elif select == 'X':
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="FolderTags", commit=True)
+            print ("\nMatches: {}  Deletes: {}\n".format(match_cnt, change_cnt))
+
+        elif select == 'y':
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="EmptyFolders")
+            print ("\nMatches: {}\n".format(match_cnt))
+        elif select == 'Y':
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="EmptyFolders", commit=True)
+            delete_items ()
+            print ("\nMatches: {}  Deletes: {}\n".format(match_cnt, change_cnt))
 
         elif select == 'w':
             ans = prompt("Output file name (default <{}>: ".format(args.Infile + OFILESUFFIX))
             if ans == "":
                 ans = args.Infile + OFILESUFFIX
-            with open(ans, 'w') as ofile:
-                json.dump(json_dict, ofile, indent=2) #, encoding="latin-1")
+            with io.open(ans, "w", encoding='utf8') as ofile:
+                # json.dump(json_dict, ofile, indent=2) #, encoding="latin-1")
+                json.dump(json_dict, ofile, ensure_ascii=False, indent=2) #, encoding="latin-1")
         elif select == 'q':
             exit()
         
@@ -134,27 +160,52 @@ Options:
 
 
 
-def digin(parent, parent_id, path, search_term, operation, commit=False):
+def digin(parent, parent_id, path, search_term, operation, commit=False, indent=""):
     """Recurse through the json dictionary bookmark tree, with operation options."""
     global match_cnt
     global change_cnt
     global do_all
+    global path_dict
 
     item_index = -1
     ans = 'n'
-    item_list = []
-
+    
     for item in parent:
         item_index += 1
 
         if "children" in item:  # ***** Its a folder *****
+
+            if operation == "printtree":
+                print ("{:<4} > {}{}".format(item["id"], indent, item["title"]))
+            
+            if operation == "SearchFolders":
+                if search_term in item["title"].lower():
+                    print ("{:<4} > {}{}".format(item["id"], indent, item["title"]))
+                    match_cnt += 1
+                    if commit:
+                        if do_all:
+                            ans = 'y'
+                        else:
+                            ans = prompt("Confirm delete for this item ('y'es, 'a'll, or 'q'uit, default no) ").lower()
+                            if ans == 'a':
+                                do_all = True
+                                ans = 'y'
+                        if ans == 'y':
+                            collect_items (path + parent_id, parent, item_index)
+                            change_cnt += 1
+                        if ans == 'q':
+                            if prompt("Discard pending deletes ('y'es, default no)? ").lower() == 'y':
+                                path_dict = {}
+                            return -1
+
+
 
             if operation == "FolderTags":
                 if "tags" in item:
                     print ("\n{:4} - {} >>> {}\n  {}".format(
                         item["id"],
                         path[3:],
-                        item["title"].encode('latin-1'),
+                        item["title"],
                         item["tags"]))
                     if "url" in item:
                         if item["url"] == None:
@@ -181,7 +232,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False):
                     print ("\n{:4} - {} >>> {}".format(
                         item["id"],
                         path, #[3:],
-                        item["title"].encode('latin-1')))
+                        item["title"]))
                     match_cnt += 1
                     if commit:
                         if do_all:
@@ -196,20 +247,28 @@ def digin(parent, parent_id, path, search_term, operation, commit=False):
                             change_cnt += 1
                         if ans == 'q':
                             if prompt("Discard pending deletes ('y'es, default no)? ").lower() == 'y':
-                                path_dict = {}
+                                path_dict = {}  # TODO
                             return -1
-            
+
+            if operation == "DupFolders":
+                log_folder (item["title"], path, item["id"], parent, parent_id, item_index)
+
+
             if digin (      # Recurse down to the next level
                     parent = item["children"],
-                    parent_id = str(item["id"]).encode("utf-8").decode("utf-8"),  # WTF? https://stackoverflow.com/questions/17627834/convert-an-int-value-to-unicode
+                    parent_id = str(item["id"]),
                     path = path + " > " + item["title"],
                     search_term = search_term,
                     operation = operation,
-                    commit = commit) == -1:
+                    commit = commit,
+                    indent = indent + "  ") == -1:
                 return -1       # recursion 'q'uit switch
 
 
         else:  # ***** Its a Leaf node *****
+            if operation == "printtree":
+                print ("{:<4} - {}{}".format(item["id"], indent, item["title"]))
+
             if operation == "DupURLs":
                 log_urls (item["url"], path, item["id"], parent, parent_id, item_index)
 
@@ -228,7 +287,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False):
                     print ("\n{:4} - {} >>> {}\n  url:  <{}>".format(
                         item["id"],
                         path[3:],
-                        item["title"].encode('latin-1'),
+                        item["title"],
                         item["url"]))
                     if "tags" in item:
                         if item["tags"] == None:
@@ -257,14 +316,14 @@ path_dict = {}
 def collect_items (path, parent, index):
     """Collect items for later deletion by delete_items."""
     global path_dict
-##    print path
-##    print parent
-##    print index
+    # print (path)        #  "/ > [xbs] Toolbar > Chris' > Blogs166"
+    # print (parent)      # List of dictionaries of bookmarks [{}, {}, {}]
+    # print (index)       # Index within the list - 2
     if path not in path_dict:
         path_dict[path] = {"parent":parent, "index":[int(index)]}
     else:
+        # else clause could happen for two identical bookmarks in the same folder, but normally they would have different ID#s
         path_dict[path]["index"].append(int(index))
-
 
 def delete_items ():
     """Delete queued-up items by collect_items.
@@ -285,6 +344,44 @@ def delete_items ():
     path_dict = {}
 
 
+
+def log_folder (foldername, path, _id, parent, parent_id, item_index):
+    """Capture list of all instances of a folder name."""
+    path_pid = path + "  [" + parent_id + "]"
+    if foldername not in folder_dict:
+        folder_dict[foldername] = {"instance": [{"id":_id, "path":path_pid, "parent":parent, "item_index":item_index, "parent_id":parent_id}]}
+    else:
+        folder_dict[foldername]["instance"].append({"id":_id, "path":path_pid, "parent":parent, "item_index":item_index, "parent_id":parent_id})
+
+def dup_folders (commit=False):
+    """List out, and optionally delete, duplicate folders."""
+    global match_cnt
+    global change_cnt
+    global folder_dict
+    global path_dict
+    for folder in folder_dict:
+        if len(folder_dict[folder]["instance"]) > 1:
+            print ("-------------------------------------------------\n{}".format(folder))
+            for instance in folder_dict[folder]["instance"]:
+                print ("  {:>4} - {}".format(instance["id"], instance["path"]))
+                match_cnt += 1
+            if commit:
+                print ("")
+                for instance in folder_dict[folder]["instance"]:
+                    print ("  {:>4} - {}".format(instance["id"], instance["path"]))
+                    ans = prompt ("Confirm delete for this item ('y'es, 'q'uit, 's'kip to next URL - default no) ").lower()
+                    if ans == 'y':
+                        collect_items (instance["path"], instance["parent"], instance["item_index"])
+                        change_cnt += 1
+                    if ans == 's':
+                        break
+                    if ans == 'q':
+                        if prompt("Discard pending deletes ('y'es, default no)? ").lower() == 'y':
+                            path_dict = {}
+                        return -1
+
+
+
 def log_urls (url, path, _id, parent, parent_id, item_index):
     """Capture a list of all instances of each URL."""
     path_pid = path + "  [" + parent_id + "]"
@@ -292,7 +389,6 @@ def log_urls (url, path, _id, parent, parent_id, item_index):
         url_dict[url] = {"instance": [{"id":_id, "path":path_pid, "parent":parent, "item_index":item_index, "parent_id":parent_id}]}
     else:
         url_dict[url]["instance"].append({"id":_id, "path":path_pid, "parent":parent, "item_index":item_index, "parent_id":parent_id})
-
 
 def dup_urls (commit=False):
     """List out, and optionally delete, bookmarks with the same URL."""
@@ -329,59 +425,60 @@ def prompt (prompt_text):
 
 
 
-def get_item (path):
-    """Lookup leaf node data given hierarchical path info.  NOT USED, BUT POTENTIALLY INTERESTING.
-Example passed-in path list structure:
-    [ "xBrowserSync", "bookmarks", 2, "ATV", 7, "Honda parts", 4 ]
-    A named item translates to "children" in the json_dict hierarchy.
-Corresponds to this path in json_dict:
-    json_dict["xBrowserSync"]["bookmarks"][2]["children"][7]["children"][4]
+# def get_item (path):
+#     """Lookup leaf node data given hierarchical path info.  NOT USED, BUT POTENTIALLY INTERESTING.
+# Example passed-in path list structure:
+#     [ "xbrowsersync", "data", "bookmarks", 2, "ATV", 7, "Honda parts", 4 ]
+#     A named item translates to "children" in the json_dict hierarchy.
+# Corresponds to this path in json_dict:
+#     json_dict["xbrowsersync"]["data"]["bookmarks"][2]["children"][7]["children"][4]
 
-Returns dictionary:
-   {"title" : "<title text>",
-    "url"   : "<url text>",
-    "id"    : id (int)
-    "tags"  : [ "<tags>", "<list"> ],
-    "text_path: "<string concat of titles and list indexes>"
-    }
-"""
-    global json_dict
+# Returns dictionary:
+#    {"title" : "<title text>",
+#     "url"   : "<url text>",
+#     "id"    : id (int)
+#     "tags"  : [ "<tags>", "<list"> ],
+#     "text_path: "<string concat of titles and list indexes>"
+#     }
+# """
+#     global json_dict
 
-    JOINTEXT = " > "
+#     JOINTEXT = " > "
 
-    xxx = json_dict["xBrowserSync"]["bookmarks"]
-    text_full_path = ""
+#     xxx = json_dict["xbrowsersync"]["data"]["bookmarks"]
+#     text_full_path = ""
 
-    for item in path:
-        print (item)
-        if type(item) is str:       # Its the title of a folder (child) level
-            xxx = xxx["children"]
-        else:                       # Its a list index (integer)
-            text_full_path += JOINTEXT + xxx[item]["title"]
-            xxx = xxx[item]
+#     for item in path:
+#         print (item)
+#         if type(item) is str:       # Its the title of a folder (child) level
+#             xxx = xxx["children"]
+#         else:                       # Its a list index (integer)
+#             text_full_path += JOINTEXT + xxx[item]["title"]
+#             xxx = xxx[item]
 
-    tags = ""
-    if "tags" in xxx:
-        tags = xxx["tags"]        
+#     tags = ""
+#     if "tags" in xxx:
+#         tags = xxx["tags"]        
 
-    return {
-        "title" : xxx["title"],
-        "url"   : xxx["url"],
-        "id"    : xxx["id"],
-        "tags"  : tags,
-        "text_full_path": text_full_path
-        }
+#     return {
+#         "title" : xxx["title"],
+#         "url"   : xxx["url"],
+#         "id"    : xxx["id"],
+#         "tags"  : tags,
+#         "text_full_path": text_full_path
+#         }
         
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=desc, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('Infile',
                         help="json backup file")
+    parser.add_argument('--dump', action='store_true',
+                        help="Dump bookmark hierarchy (redirect to less or a file)")
     args = parser.parse_args()
 
     if not os.path.exists(args.Infile):
         print ("Can't find the input file <{}>".format(args.Infile))
         exit()
-
 
     main()
