@@ -9,16 +9,22 @@ If you want it to do other functions, grab the code and go for it.
 ## Usage
 ```
 $ ./xbsjsonedit -h
-usage: xbsjsonedit [-h] [--dump] Infile
+usage: xbsjsonedit [-h] [--Print] [--Tags-Print] [--Tags-Count TAGS_COUNT]
+                   [-V]
+                   Infile
 
 xBrowserSync json backup editor
 
 positional arguments:
-  Infile      json backup file
+  Infile                json backup file
 
 optional arguments:
-  -h, --help  show this help message and exit
-  --dump      Dump bookmark hierarchy (redirect to less or a file)
+  -h, --help            show this help message and exit
+  --Print, -p           Print bookmark hierarchy (redirect to less or a file)
+  --Tags-Print, -t      Print tags list
+  --Tags-Count TAGS_COUNT, -c TAGS_COUNT
+                        Filter Tags-List for min number of times a tag is used (defult 2). =0 prints only single use tags.
+  -V, --version         Return version number and exit.
 ```
 
 ## Internal command menu
@@ -61,7 +67,9 @@ Five modes are supported Listing/Deleting based on:
 - Folders that have tags - there is no value for folders having tags
 - Empty folders - which may arise if all bookmarks were deleted from a folder
 
-The Print function prints the full list of bookmarks in folder hierarchical form, listing the ID number and Title of each folder and bookmark.  The `--dump` switch may be used for getting a good visual dump of the bookmarks in less or an editor for reference while using the interactive mode.
+The Print function prints the full list of bookmarks in folder hierarchical form, listing the ID number and Title of each folder and bookmark.  The `--Print` switch may be used for getting a good visual dump of the bookmarks in less or an editor for reference while using the interactive mode.  The tags on each bookmark are listed as well.
+
+The `--Tags-Print` switch prints bookmarks by tag name, where a minimum of 2 bookmarks share the same tag, as set by the `--Tags-Count` switch.  Setting `--Tags-Count 1` prints all bookmarks with tags.  Setting `--Tags-Count 0` prints all bookmarks with only one tag - useful for finding remnant tags.
 
 A lower case letter `t/g/d/f/x/y` will list the offenders, while an upper case letter 
 `T/G/D/F/X/Y` will allow for selective deletes of the offenders. The lower case List operation
@@ -88,3 +96,8 @@ syncID, so you may want to Disable Sync, then create a new sync before restoring
 - This code only works with Python 3.  Development and testing was done on Linux with Python 3.7.3.
 
 
+## Version history
+
+- 191206 v0.3   Added tags dump
+- 191205 v0.2   Updated to xbrowsersync v1.5 and Python 3.x ONLY
+- 181128 v0.1   New
