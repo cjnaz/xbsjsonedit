@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
+"""xBrowserSync json backup editor"""
+
+__version__ = "v0.3 191206"
 
 #==========================================================
 #
-desc = """xBrowserSync json backup editor"""
 #  Chris Nelson  2018 - 2019
 #
-# 191205    Updated to xbrowsersync v1.5 and Python 3.x ONLY
-# 181128    New
+# 191206 v0.3   Added tags dump
+# 191205 v0.2   Updated to xbrowsersync v1.5 and Python 3.x ONLY
+# 181128 v0.1   New
 #
 # Issues, and changes pending
 #   None
@@ -31,6 +34,7 @@ NONE_SEARCH = "__NONE__"
 # Global items
 url_dict = {}
 folder_dict = {}
+tags_dict = {}
 
 
 def main():
@@ -40,14 +44,28 @@ def main():
     global json_dict
     global url_dict
     global folder_dict
+    global tags_dict
     
     with io.open(args.Infile, encoding='utf8', errors="replace") as json_data:
         json_dict = json.load(json_data)
 
     term = NONE_SEARCH
 
-    if args.dump:
+    if args.Print:
         digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="printtree")
+        exit()
+    if args.Tags_Print:
+        digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="GatherTags")
+        for tag in sorted(tags_dict.keys()):
+            if args.Tags_Count == 0:
+                if len(tags_dict[tag]) == 1:
+                    print ("\n[{}]:".format(tag))
+                    print ("    {:<4} - {}".format(tags_dict[tag][0]["id"], tags_dict[tag][0]["title"]))
+            else:
+                if len(tags_dict[tag]) >= args.Tags_Count:
+                    print ("\n[{}]:".format(tag))
+                    for bookmark in tags_dict[tag]:
+                        print ("    {:<4} - {}".format(bookmark["id"], bookmark["title"]))
         exit()
 
     while (1):
@@ -150,8 +168,7 @@ Options:
             if ans == "":
                 ans = args.Infile + OFILESUFFIX
             with io.open(ans, "w", encoding='utf8') as ofile:
-                # json.dump(json_dict, ofile, indent=2) #, encoding="latin-1")
-                json.dump(json_dict, ofile, ensure_ascii=False, indent=2) #, encoding="latin-1")
+                json.dump(json_dict, ofile, ensure_ascii=False, indent=2)
         elif select == 'q':
             exit()
         
@@ -267,7 +284,12 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
 
         else:  # ***** Its a Leaf node *****
             if operation == "printtree":
-                print ("{:<4} - {}{}".format(item["id"], indent, item["title"]))
+                tags = ""
+                if "tags" in item:
+
+                    for tag in item["tags"]:
+                        tags += tag + ", "
+                print ("{:<4} - {}{}  [{}]".format(item["id"], indent, item["title"], tags[:-2]))
 
             if operation == "DupURLs":
                 log_urls (item["url"], path, item["id"], parent, parent_id, item_index)
@@ -310,6 +332,16 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                             if prompt("Discard pending deletes ('y'es, default no)? ").lower() == 'y':
                                 path_dict = {}
                             return -1
+
+            if operation == "GatherTags":
+                if "tags" in item:
+                    if item["tags"] != None:
+                        for tag in item["tags"]:
+                            if tag not in tags_dict:
+                                tags_dict[tag] = [{"title":item["title"], "id":item["id"]}]
+                            else:
+                                tags_dict[tag].append({"title":item["title"], "id":item["id"]})
+
 
 
 path_dict = {}
@@ -418,9 +450,9 @@ def dup_urls (commit=False):
 
 
 def prompt (prompt_text):
-    if sys.version_info[0] < 3:
-        return (raw_input(prompt_text))
-    else:
+    # if sys.version_info[0] < 3:
+    #     return (raw_input(prompt_text))
+    # else:
         return (input(prompt_text))
 
 
@@ -470,11 +502,19 @@ def prompt (prompt_text):
         
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=desc, formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('Infile',
                         help="json backup file")
-    parser.add_argument('--dump', action='store_true',
-                        help="Dump bookmark hierarchy (redirect to less or a file)")
+    parser.add_argument('--Print', '-p', action='store_true',
+                        help="Print bookmark hierarchy (redirect to less or a file)")
+    parser.add_argument('--Tags-Print', '-t', action='store_true',
+                        help="Print tags list")
+    parser.add_argument('--Tags-Count', '-c', default=2, type=int,
+                        help="Filter Tags-List for min number of times a tag is used (defult 2). =0 prints only single use tags.")
+    parser.add_argument('-V', '--version',
+                        help="Return version number and exit.",
+                        action='version',
+                        version='%(prog)s ' + __version__)
     args = parser.parse_args()
 
     if not os.path.exists(args.Infile):
