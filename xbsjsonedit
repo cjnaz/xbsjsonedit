@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 """xBrowserSync json backup editor"""
 
@@ -14,7 +14,7 @@ __version__ = "v0.3 191206"
 #
 # Issues, and changes pending
 #   None
-#   
+#
 #==========================================================
 
 import argparse
@@ -45,7 +45,7 @@ def main():
     global url_dict
     global folder_dict
     global tags_dict
-    
+
     with io.open(args.Infile, encoding='utf8', errors="replace") as json_data:
         json_dict = json.load(json_data)
 
@@ -95,11 +95,11 @@ Options:
 
   y:  List   empty folders (may arise if all children were deleted)
   Y:  Delete empty folders
-  
+
   w:  Write out the bookmarks data to a file
   q:  Quit/exit (Do a Write first!)
 """.format(term))
-        
+
         select = prompt("Enter option: ")
 
         if select == 'p':
@@ -171,7 +171,7 @@ Options:
                 json.dump(json_dict, ofile, ensure_ascii=False, indent=2)
         elif select == 'q':
             exit()
-        
+
         else:
             print ("Invalid option {}".format(select))
 
@@ -186,7 +186,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
 
     item_index = -1
     ans = 'n'
-    
+
     for item in parent:
         item_index += 1
 
@@ -194,7 +194,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
 
             if operation == "printtree":
                 print ("{:<4} > {}{}".format(item["id"], indent, item["title"]))
-            
+
             if operation == "SearchFolders":
                 if search_term in item["title"].lower():
                     print ("{:<4} > {}{}".format(item["id"], indent, item["title"]))
@@ -243,7 +243,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                             change_cnt += 1
                         if ans == 'q':
                             return -1
-            
+
             if operation == "EmptyFolders":
                 if len(item["children"]) == 0:
                     print ("\n{:4} - {} >>> {}".format(
@@ -359,12 +359,12 @@ def collect_items (path, parent, index):
 
 def delete_items ():
     """Delete queued-up items by collect_items.
-	Note:  Items in lists that are to be deleted must be deleted from the highest 
+	Note:  Items in lists that are to be deleted must be deleted from the highest
 	index / item number to the lowest, else the index numbers will be wrong, resulting
 	in garbage.  This is the purpose of the collect_items and delete_items functions.
 	"""
     global path_dict
-    
+
     for path in path_dict:
         xxx = path_dict[path]["index"]
 ##        print path
@@ -490,7 +490,7 @@ def prompt (prompt_text):
 
 #     tags = ""
 #     if "tags" in xxx:
-#         tags = xxx["tags"]        
+#         tags = xxx["tags"]
 
 #     return {
 #         "title" : xxx["title"],
@@ -499,7 +499,7 @@ def prompt (prompt_text):
 #         "tags"  : tags,
 #         "text_full_path": text_full_path
 #         }
-        
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
