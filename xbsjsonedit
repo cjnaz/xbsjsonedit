@@ -30,6 +30,43 @@ INDENT = 2
 OFILESUFFIX = "_OUT"
 NONE_SEARCH = "__NONE__"
 
+# getch: Get one character from terminal without waiting for newline
+class _Getch:
+    """Gets a single character from standard input.  Does not echo to the screen.
+    """
+    def __init__(self):
+        try:
+            self.impl = _GetchWindows()
+        except ImportError:
+            self.impl = _GetchUnix()
+
+    def __call__(self): return self.impl()
+
+class _GetchUnix:
+    def __init__(self):
+        import tty, sys
+
+    def __call__(self):
+        import sys, tty, termios
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(sys.stdin.fileno())
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return ch
+
+class _GetchWindows:
+    def __init__(self):
+        import msvcrt
+
+    def __call__(self):
+        import msvcrt
+        return msvcrt.getch()
+
+getch = _Getch()
+
 
 # Global items
 url_dict = {}
@@ -100,8 +137,9 @@ Options:
   q:  Quit/exit (Do a Write first!)
 """.format(term))
 
-        select = prompt("Enter option: ")
-
+        print("Enter option: ", end='', flush=True)
+        select = getch()
+        print( select )
         if select == 'p':
             digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="printtree")
 
@@ -427,6 +465,8 @@ def dup_urls (commit=False):
     global match_cnt
     global change_cnt
     global path_dict
+    global yes_all
+    yes_all = False
     for url in url_dict:
         if len(url_dict[url]["instance"]) > 1:
             print ("-------------------------------------------------\n{}".format(url))
@@ -435,10 +475,20 @@ def dup_urls (commit=False):
                 match_cnt += 1
             if commit:
                 print ("")
+                first_instance = True
                 for instance in url_dict[url]["instance"]:
-                    print ("  {:>4} - {}".format(instance["id"], instance["path"]))
-                    ans = prompt ("Confirm delete for this item ('y'es, 'q'uit, 's'kip to next URL - default no) ").lower()
-                    if ans == 'y':
+                    if first_instance and yes_all:
+                        first_instance = False
+                        continue        # When yes_all is active, always keep first instance of duplicate bookmarks
+                    first_instance = False
+                    if not yes_all:
+                        print ("  {:>4} - {}".format(instance["id"], instance["path"]))
+                        print ("Confirm delete for this item ('y'es, 'q'uit, 's'kip to next URL, 'a'll - default no): ", end='', flush=True)
+                        ans = getch()
+                        print (ans)
+                    if ans == 'a':
+                        yes_all = True
+                    if ans == 'y' or yes_all:
                         collect_items (instance["path"], instance["parent"], instance["item_index"])
                         change_cnt += 1
                     if ans == 's':
