@@ -88,7 +88,7 @@ The output file defaults to the Infile + "_OUT", and can be specified during the
 
 ## Version history
 
-- 200329 v1.0   Merged pull request #3 from mblais (add unbuffered getch input; add 'all' option), Reworked --tags and --names switches.
+- 200330 v1.0   Merged pull request #3 from mblais (add unbuffered getch input; add 'all' option), Reworked --tags and --names switches.
 - 191206 v0.3   Added tags dump
 - 191205 v0.2   Updated to xbrowsersync v1.5 and Python 3.x ONLY
 - 181128 v0.1   New
