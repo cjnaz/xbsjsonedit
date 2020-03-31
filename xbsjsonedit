@@ -2,12 +2,13 @@
 # -*- coding: UTF-8 -*-
 """xBrowserSync json backup editor"""
 
-__version__ = "v0.3 191206"
+__version__ = "v0.4 200329"
 
 #==========================================================
 #
 #  Chris Nelson  2018 - 2019
 #
+# 200329 v0.4   Merged pull request #3 from mblais - add unbuffered getch input; add 'all' option
 # 191206 v0.3   Added tags dump
 # 191205 v0.2   Updated to xbrowsersync v1.5 and Python 3.x ONLY
 # 181128 v0.1   New
@@ -30,44 +31,6 @@ INDENT = 2
 OFILESUFFIX = "_OUT"
 NONE_SEARCH = "__NONE__"
 
-# getch: Get one character from terminal without waiting for newline
-class _Getch:
-    """Gets a single character from standard input.  Does not echo to the screen.
-    """
-    def __init__(self):
-        try:
-            self.impl = _GetchWindows()
-        except ImportError:
-            self.impl = _GetchUnix()
-
-    def __call__(self): return self.impl()
-
-class _GetchUnix:
-    def __init__(self):
-        import tty, sys
-
-    def __call__(self):
-        import sys, tty, termios
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-        try:
-            tty.setraw(sys.stdin.fileno())
-            ch = sys.stdin.read(1)
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        return ch
-
-class _GetchWindows:
-    def __init__(self):
-        import msvcrt
-
-    def __call__(self):
-        import msvcrt
-        return msvcrt.getch()
-
-getch = _Getch()
-
-
 # Global items
 url_dict = {}
 folder_dict = {}
@@ -88,18 +51,20 @@ def main():
 
     term = NONE_SEARCH
 
-    if args.Print:
+    if args.print:
         digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="printtree")
         exit()
-    if args.Tags_Print:
+    if args.tags_print:
         digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="GatherTags")
         for tag in sorted(tags_dict.keys()):
-            if args.Tags_Count == 0:
+            if args.tags_count == 0:
                 if len(tags_dict[tag]) == 1:
                     print ("\n[{}]:".format(tag))
                     print ("    {:<4} - {}".format(tags_dict[tag][0]["id"], tags_dict[tag][0]["title"]))
+            elif args.tags_count == -1:
+                print ("{:5}  {}".format(len(tags_dict[tag]), tag))
             else:
-                if len(tags_dict[tag]) >= args.Tags_Count:
+                if len(tags_dict[tag]) >= args.tags_count:
                     print ("\n[{}]:".format(tag))
                     for bookmark in tags_dict[tag]:
                         print ("    {:<4} - {}".format(bookmark["id"], bookmark["title"]))
@@ -137,14 +102,15 @@ Options:
   q:  Quit/exit (Do a Write first!)
 """.format(term))
 
-        print("Enter option: ", end='', flush=True)
-        select = getch()
-        print( select )
+        select = prompt("Enter option: ", valid="stTgGdDfFxXyYwq")
+        # print("Enter option: ", end='', flush=True)
+        # select = getch()
+        # print( select )
         if select == 'p':
             digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="printtree")
 
         elif select == 's':
-            term = prompt("Search for (empty to clear search term): ").lower()
+            term = prompt_long("Search for (empty to clear search term): ").lower()
             if term == "":
                 term = NONE_SEARCH
         elif select == 't':
@@ -202,16 +168,24 @@ Options:
             print ("\nMatches: {}  Deletes: {}\n".format(match_cnt, change_cnt))
 
         elif select == 'w':
-            ans = prompt("Output file name (default <{}>: ".format(args.Infile + OFILESUFFIX))
+            ans = prompt_long("Output file name (default <{}>: ".format(args.Infile + OFILESUFFIX))
             if ans == "":
                 ans = args.Infile + OFILESUFFIX
             with io.open(ans, "w", encoding='utf8') as ofile:
                 json.dump(json_dict, ofile, ensure_ascii=False, indent=2)
         elif select == 'q':
             exit()
-
+            # if not changes:
+            #     exit()
+            # else:
+            #     if prompt("Exit without saving changes?", valid="yn") == 'y':
+            #         exit()
         else:
-            print ("Invalid option {}".format(select))
+            print ("Shouldn't have gotten here!")
+            exit()
+
+        # else:
+        #     print ("Invalid option {}".format(select))
 
 
 
@@ -221,6 +195,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
     global change_cnt
     global do_all
     global path_dict
+    # global changes
 
     item_index = -1
     ans = 'n'
@@ -234,6 +209,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                 print ("{:<4} > {}{}".format(item["id"], indent, item["title"]))
 
             if operation == "SearchFolders":
+                # local_changes = False
                 if search_term in item["title"].lower():
                     print ("{:<4} > {}{}".format(item["id"], indent, item["title"]))
                     match_cnt += 1
@@ -241,17 +217,24 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                         if do_all:
                             ans = 'y'
                         else:
-                            ans = prompt("Confirm delete for this item ('y'es, 'a'll, or 'q'uit, default no) ").lower()
+                            ans = prompt("Confirm delete for this item ('y'es, 'a'll, or 'q'uit, default 'n'o) ", valid="yaqn\r")
+        # print("Enter option: ", end='', flush=True)
+        # select = getch()
+        # print( select )
+
                             if ans == 'a':
                                 do_all = True
                                 ans = 'y'
                         if ans == 'y':
                             collect_items (path + parent_id, parent, item_index)
                             change_cnt += 1
+                            # local_changes = True
                         if ans == 'q':
-                            if prompt("Discard pending deletes ('y'es, default no)? ").lower() == 'y':
+                            if prompt("Discard pending deletes ('y'es, default 'n'o)? ", valid="yn\n") == 'y':
+                                # local_changes = False
                                 path_dict = {}
                             return -1
+                # changes = changes or local_changes
 
 
 
@@ -272,13 +255,14 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                         if do_all:
                             ans = 'y'
                         else:
-                            ans = prompt("Confirm immediate delete of tags on this folder ('y'es, 'a'll, or 'q'uit, default no) ").lower()
+                            ans = prompt("Confirm immediate delete of tags on this folder ('y'es, 'a'll, or 'q'uit, default 'n'o) ", valid="yaqn\r")
                             if ans == 'a':
                                 do_all = True
                                 ans = 'y'
                         if ans == 'y':
                             del item["tags"]
                             change_cnt += 1
+                            # changes = True
                         if ans == 'q':
                             return -1
 
@@ -293,7 +277,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                         if do_all:
                             ans = 'y'
                         else:
-                            ans = prompt("Confirm delete of this empty folder ('y'es, 'a'll, or 'q'uit, default no) ").lower()
+                            ans = prompt("Confirm delete of this empty folder ('y'es, 'a'll, or 'q'uit, default 'n'o) ", valid="yaqn\r")
                             if ans == 'a':
                                 do_all = True
                                 ans = 'y'
@@ -301,7 +285,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                             collect_items (path + parent_id, parent, item_index)
                             change_cnt += 1
                         if ans == 'q':
-                            if prompt("Discard pending deletes ('y'es, default no)? ").lower() == 'y':
+                            if prompt("Discard pending deletes ('y'es, default 'n'o) ", valid="yn\r") == 'y':
                                 path_dict = {}  # TODO
                             return -1
 
@@ -359,7 +343,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                         if do_all:
                             ans = 'y'
                         else:
-                            ans = prompt("Confirm delete for this item ('y'es, 'a'll, or 'q'uit, default no) ").lower()
+                            ans = prompt("Confirm delete for this item ('y'es, 'a'll, or 'q'uit, default 'n'o) ", valid="yaqn\r")
                             if ans == 'a':
                                 do_all = True
                                 ans = 'y'
@@ -367,7 +351,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                             collect_items (path + parent_id, parent, item_index)
                             change_cnt += 1
                         if ans == 'q':
-                            if prompt("Discard pending deletes ('y'es, default no)? ").lower() == 'y':
+                            if prompt("Discard pending deletes ('y'es, default 'n'o) ", valid="yn\r") == 'y':
                                 path_dict = {}
                             return -1
 
@@ -429,24 +413,34 @@ def dup_folders (commit=False):
     global change_cnt
     global folder_dict
     global path_dict
+    yes_all = False
     for folder in folder_dict:
         if len(folder_dict[folder]["instance"]) > 1:
             print ("-------------------------------------------------\n{}".format(folder))
-            for instance in folder_dict[folder]["instance"]:
+            # for instance in folder_dict[folder]["instance"]:
+            for instance in sorted(folder_dict[folder]["instance"], key=lambda k: k['id']):   # Sort id numbers so that lowest is kept for 'a'll mode
                 print ("  {:>4} - {}".format(instance["id"], instance["path"]))
                 match_cnt += 1
             if commit:
                 print ("")
-                for instance in folder_dict[folder]["instance"]:
-                    print ("  {:>4} - {}".format(instance["id"], instance["path"]))
-                    ans = prompt ("Confirm delete for this item ('y'es, 'q'uit, 's'kip to next URL - default no) ").lower()
-                    if ans == 'y':
+                first_instance = True
+                for instance in sorted(folder_dict[folder]["instance"], key=lambda k: k['id']):
+                    if first_instance and yes_all:
+                        first_instance = False
+                        continue        # When yes_all is active, always keep first instance of duplicate folders
+                    first_instance = False
+                    if not yes_all:
+                        print ("  {:>4} - {}".format(instance["id"], instance["path"]))
+                        ans = prompt ("Confirm delete for this item ('y'es, 'q'uit, 's'kip to next URL, 'a'll - default 'n'o) ", valid="yqsan\r")
+                    if ans == 'a':
+                        yes_all = True
+                    if ans == 'y' or yes_all:
                         collect_items (instance["path"], instance["parent"], instance["item_index"])
                         change_cnt += 1
                     if ans == 's':
                         break
                     if ans == 'q':
-                        if prompt("Discard pending deletes ('y'es, default no)? ").lower() == 'y':
+                        if prompt("Discard pending deletes ('y'es, default 'n'o) ", valid="yn\r") == 'y':
                             path_dict = {}
                         return -1
 
@@ -465,27 +459,30 @@ def dup_urls (commit=False):
     global match_cnt
     global change_cnt
     global path_dict
-    global yes_all
+    # global yes_all
     yes_all = False
     for url in url_dict:
         if len(url_dict[url]["instance"]) > 1:
             print ("-------------------------------------------------\n{}".format(url))
-            for instance in url_dict[url]["instance"]:
+            # for instance in url_dict[url]["instance"]:
+            for instance in sorted(url_dict[url]["instance"], key=lambda k: k['id']):   # Sort id numbers so that lowest is kept for 'a'll mode
                 print ("  {:>4} - {}".format(instance["id"], instance["path"]))
                 match_cnt += 1
             if commit:
                 print ("")
                 first_instance = True
-                for instance in url_dict[url]["instance"]:
+                # for instance in url_dict[url]["instance"]:
+                for instance in sorted(url_dict[url]["instance"], key=lambda k: k['id']):
                     if first_instance and yes_all:
                         first_instance = False
                         continue        # When yes_all is active, always keep first instance of duplicate bookmarks
                     first_instance = False
                     if not yes_all:
                         print ("  {:>4} - {}".format(instance["id"], instance["path"]))
-                        print ("Confirm delete for this item ('y'es, 'q'uit, 's'kip to next URL, 'a'll - default no): ", end='', flush=True)
-                        ans = getch()
-                        print (ans)
+                        # print ("Confirm delete for this item ('y'es, 'q'uit, 's'kip to next URL, 'a'll - default no): ", end='', flush=True)
+                        ans = prompt ("Confirm delete for this item ('y'es, 'q'uit, 's'kip to next URL, 'a'll - default 'n'o) ", valid="yqsan\r")
+                        # ans = getch()
+                        # print (ans)
                     if ans == 'a':
                         yes_all = True
                     if ans == 'y' or yes_all:
@@ -494,17 +491,68 @@ def dup_urls (commit=False):
                     if ans == 's':
                         break
                     if ans == 'q':
-                        if prompt("Discard pending deletes ('y'es, default no)? ").lower() == 'y':
+                        if prompt("Discard pending deletes ('y'es, default 'n'o) ", valid="yn\r") == 'y':
                             path_dict = {}
                         return -1
 
+def prompt_long (prompt_text):
+    return (input(prompt_text))
 
-def prompt (prompt_text):
-    # if sys.version_info[0] < 3:
-    #     return (raw_input(prompt_text))
-    # else:
-        return (input(prompt_text))
 
+def prompt (prompt_text, valid=None):
+    print(prompt_text, end='', flush=True)
+    select = getch()
+    if valid is not None:
+        while select not in valid:
+            xx = list(valid)
+            yy = ", ".join(xx).replace("\r", "enter")
+            print("\nInvalid input - expecting one of <{}>: ".format(yy), end='', flush=True)
+            # print("\nInvalid input - expecting one of <{}>: ".format(valid.replace("\r","\\r")), end='', flush=True)
+            # print("\nInvalid input - expecting one of <{}>: ".format(valid.replace("\n","\\n")), end='', flush=True)
+            select = getch()
+            # print ("<",ord(select),">")
+            # print ("<",ord("\n"),">")
+
+    print(select)
+    return select
+
+
+
+class _Getch:
+    """Gets a single character from standard input.  Does not echo to the screen.
+    """
+    def __init__(self):
+        try:
+            self.impl = _GetchWindows()
+        except ImportError:
+            self.impl = _GetchUnix()
+
+    def __call__(self): return self.impl()
+
+class _GetchUnix:
+    def __init__(self):
+        import tty, sys
+
+    def __call__(self):
+        import sys, tty, termios
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(sys.stdin.fileno())
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return ch
+
+class _GetchWindows:
+    def __init__(self):
+        import msvcrt
+
+    def __call__(self):
+        import msvcrt
+        return msvcrt.getch()
+
+getch = _Getch()
 
 
 # def get_item (path):
@@ -555,12 +603,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('Infile',
                         help="json backup file")
-    parser.add_argument('--Print', '-p', action='store_true',
+    parser.add_argument('--print', '-p', action='store_true',
                         help="Print bookmark hierarchy (redirect to less or a file)")
-    parser.add_argument('--Tags-Print', '-t', action='store_true',
+    parser.add_argument('--tags-print', '-t', action='store_true',
                         help="Print tags list")
-    parser.add_argument('--Tags-Count', '-c', default=2, type=int,
-                        help="Filter Tags-List for min number of times a tag is used (defult 2). =0 prints only single use tags.")
+    parser.add_argument('--tags-count', '-c', default=2, type=int,
+                        help="Filter tags-print for min number of times a tag is used (default 2). =0 prints only single use tags. =-1 prints only count per tag")
     parser.add_argument('-V', '--version',
                         help="Return version number and exit.",
                         action='version',
