@@ -11,7 +11,7 @@ Command line (CLI) modes support searching and printing select views of your boo
 browser-loadable web page with your bookmarks organized by tag name.  See more info below.
 
 ## Notable changes in the latest release
-V1.10 200608
+V1.1 200608
 - Added `--html` command line mode which generates html output of your tagged bookmarks.
 - Changed the command line interface so that the input file defaults to the newest xbs_backup*.json file in your specified
 directory (per the JSON_PATH_DEFAULT assignment in the code).  The input file may also be specified using the
