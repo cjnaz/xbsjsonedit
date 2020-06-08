@@ -1,12 +1,29 @@
 #!/usr/bin/env python3
-"""xBrowserSync json backup editor"""
+"""xBrowserSync json backup editor
 
-__version__ = "v1.0 200330"
+Usages:
+  Command line modes:
+    xbsjsonedit news                   prints bookmarks tagged with 'news'
+    xbsjsonedit news --bookmarks       prints bookmarks tagged with 'news' and any bookmarks or URLs containing 'news'
+    xbsjsonedit --print                prints all bookmarks with their hierarchy
+    xbsjsonedit --tags 5               prints only tag names that are used at least 5 times
+    xbsjsonedit --tags 5 --names       prints tag names and their bookmarks that are used at least 5 times
+    xbsjsonedit --tags 0 --names       prints tag names and their bookmark that are used exactly 1 time
+    xbsjsonedit --html <outfile.html>  writes tagged bookmarks to the specified browsable file
+
+  Interactive mode:
+    xbsjsonedit                     Enters interactive mode
+
+  The path to the xbs_backup*.json file defaults to the newest in the download directory.  --jsonbackup overrides the default.
+"""
+
+__version__ = "v1.1 200608"
 
 #==========================================================
 #
-#  Chris Nelson  2018 - 2019
+#  Chris Nelson  2018 - 2020
 #
+# 200608 v1.1   Added cli search and html features, defaulted .json file to be the newest in the download directory.
 # 200330 v1.0   Merged pull request #3 from mblais (add unbuffered getch input; add 'all' option), Reworked --tags and --names switches.
 # 191206 v0.3   Added tags dump
 # 191205 v0.2   Updated to xbrowsersync v1.5 and Python 3.x ONLY
@@ -18,17 +35,28 @@ __version__ = "v1.0 200330"
 #==========================================================
 
 import argparse
-import os.path
+import os
 import json
 import codecs
 import sys
 import io
+import glob
 
 
 # Configs / Constants
 INDENT = 2
 OFILESUFFIX = "_OUT"
 NONE_SEARCH = "__NONE__"
+
+if sys.platform == "win32":
+    JSON_PATH_DEFAULT = "Z:\\Downloads\\"
+if "linux" in sys.platform:  # <linux2> on Py2, <linux> on Py3
+    JSON_PATH_DEFAULT = "/mnt/share/Downloads/"
+
+py_version = float(sys.version_info.major) + float(sys.version_info.minor)/10
+if py_version < 3.6:
+    print ("Not supported on Python versions before 3.6.")
+    sys.exit()
 
 # Global items
 url_dict = {}
@@ -45,14 +73,55 @@ def main():
     global folder_dict
     global tags_dict
 
-    with io.open(args.Infile, encoding='utf8', errors="replace") as json_data:
+    with io.open(infile, encoding='utf8', errors="replace") as json_data:
         json_dict = json.load(json_data)
 
     term = NONE_SEARCH
 
+    # CLI mode
     if args.print:
         digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="printtree")
-        exit()
+        sys.exit()
+
+
+    if args.html is not None:
+        digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="GatherTags")
+        tags_count = 2
+        if args.tags > 0:
+            tags_count = args.tags
+
+        html_fout = io.open (args.html, 'wt')
+        html_fout.write("""<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+    <html>
+    <head>
+      <title>xbs Tags</title>
+    </head>
+
+    <body>
+        <a name="top"></a>
+        <h1>Tagged bookmarks list</h1>
+        """)
+        html_fout.write(f'(Tags used {tags_count} or more times)<br>\n')
+
+        for tag in sorted(tags_dict.keys()):
+            if len(tags_dict[tag]) >= tags_count:
+                html_fout.write(f'        <b><a href="#{tag}">{tag}</a></b><br>\n')
+        html_fout.write("        <br>\n")
+
+        for tag in sorted(tags_dict.keys()):
+            if len(tags_dict[tag]) >= tags_count:
+                html_fout.write(f'        <a name="{tag}"></a><H3>{tag} ({len(tags_dict[tag])}):</H3>\n')
+                html_fout.write('        <BLOCKQUOTE>\n')
+                for bookmark in tags_dict[tag]:
+                    html_fout.write ('        <A HREF="{}" target="_blank">{}</A><BR>\n'.format(bookmark['url'], bookmark['title']))
+                html_fout.write('        <a href="#top">(top)</a>\n')
+                html_fout.write('        </BLOCKQUOTE>\n')
+
+        html_fout.write("    </body> </html>")
+        html_fout.close()
+        sys.exit()
+
+
     if args.tags > -1:
         digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="GatherTags")
         for tag in sorted(tags_dict.keys()):
@@ -69,8 +138,33 @@ def main():
                         for bookmark in tags_dict[tag]:
                             print ("    {:<4} - {}".format(bookmark["id"], bookmark["title"]))
                         print()
-        exit()
+        sys.exit()
 
+
+    if args.SearchTerm is not None:
+        _search_term = args.SearchTerm.lower()
+        print (f"***** Bookmarks tagged with <{_search_term}>:")
+        digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="GatherTags")
+        for tag in sorted(tags_dict.keys()):
+            if _search_term in tag.lower():
+                print (f"  [{tag}] ({len(tags_dict[tag])}):")
+                for bookmark in tags_dict[tag]:
+                    print (f"    {bookmark['title']}")
+                print()
+
+        if args.bookmarks:
+            match_cnt = 0
+            print (f"\n***** Bookmarks containing or tagged with <{_search_term}>:")
+            digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term=_search_term, operation="search2")
+
+        sys.exit()
+
+    if args.bookmarks:  # and not args.SearchTerm
+        print ("A SearchTerm is required with use of the --bookmark switch.")
+        sys.exit()
+
+
+    # Interactive mode
     while (1):
         match_cnt = 0
         change_cnt = 0
@@ -103,7 +197,7 @@ Options:
   q:  Quit/exit (Do a Write first!)
 """.format(term))
 
-        select = prompt("Enter option: ", valid="stTgGdDfFxXyYwq")
+        select = prompt("Enter option: ", valid="pstTgGdDfFxXyYwq")
         if select == 'p':
             digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="printtree")
 
@@ -166,17 +260,17 @@ Options:
             print ("\nMatches: {}  Deletes: {}\n".format(match_cnt, change_cnt))
 
         elif select == 'w':
-            ans = prompt_long("Output file name (default <{}>: ".format(args.Infile + OFILESUFFIX))
+            ans = prompt_long("Output file name (default <{}>: ".format(infile + OFILESUFFIX))
             if ans == "":
-                ans = args.Infile + OFILESUFFIX
+                ans = infile + OFILESUFFIX
             with io.open(ans, "w", encoding='utf8') as ofile:
                 json.dump(json_dict, ofile, ensure_ascii=False, indent=2)
         elif select == 'q':
             if prompt("Quit now?  (Remember to write any changes first!) ", valid="yn") == 'y':
-                exit()
+                sys.exit()
         else:
             print ("Shouldn't have gotten here!")
-            exit()
+            sys.exit()
 
 
 def digin(parent, parent_id, path, search_term, operation, commit=False, indent=""):
@@ -198,7 +292,6 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                 print ("{:<4} > {}{}".format(item["id"], indent, item["title"]))
 
             if operation == "SearchFolders":
-                # local_changes = False
                 if search_term in item["title"].lower():
                     print ("{:<4} > {}{}".format(item["id"], indent, item["title"]))
                     match_cnt += 1
@@ -249,7 +342,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                 if len(item["children"]) == 0:
                     print ("\n{:4} - {} >>> {}".format(
                         item["id"],
-                        path, #[3:],
+                        path,
                         item["title"]))
                     match_cnt += 1
                     if commit:
@@ -295,7 +388,7 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
             if operation == "DupURLs":
                 log_urls (item["url"], path, item["id"], parent, parent_id, item_index)
 
-            if operation == "search":
+            if operation == "search" or operation == "search2":
                 match = False
                 if search_term in item["url"].lower() or search_term in item["title"].lower():
                     match = True
@@ -307,16 +400,19 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
 
                 if match:
                     match_cnt += 1
-                    print ("\n{:4} - {} >>> {}\n  url:  <{}>".format(
-                        item["id"],
-                        path[3:],
-                        item["title"],
-                        item["url"]))
-                    if "tags" in item:
-                        if item["tags"] == None:
-                            print ("  tags = None !!!")
-                        else:
-                            print ("  tags: <{}>".format(item["tags"]))
+                    if operation == "search":
+                        print ("\n{:4} - {} >>> {}\n  url:  <{}>".format(
+                            item["id"],
+                            path[3:],
+                            item["title"],
+                            item["url"]))
+                        if "tags" in item:
+                            if item["tags"] == None:
+                                print ("  tags = None !!!")
+                            else:
+                                print ("  tags: <{}>".format(item["tags"]))
+                    if operation == "search2":
+                        print (f"    {item['title']}")
 
                     if commit:
                         if do_all:
@@ -339,9 +435,9 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                     if item["tags"] != None:
                         for tag in item["tags"]:
                             if tag not in tags_dict:
-                                tags_dict[tag] = [{"title":item["title"], "id":item["id"]}]
+                                tags_dict[tag] = [{"title":item["title"], "id":item["id"], "url":item["url"]}]
                             else:
-                                tags_dict[tag].append({"title":item["title"], "id":item["id"]})
+                                tags_dict[tag].append({"title":item["title"], "id":item["id"], "url":item["url"]})
 
 
 
@@ -349,7 +445,7 @@ path_dict = {}
 def collect_items (path, parent, index):
     """Collect items for later deletion by delete_items."""
     global path_dict
-    # print (path)        #  "/ > [xbs] Toolbar > Chris' > Blogs166"
+    # print (path)        # "/ > [xbs] Toolbar > Chris' > Blogs166"
     # print (parent)      # List of dictionaries of bookmarks [{}, {}, {}]
     # print (index)       # Index within the list - 2
     if path not in path_dict:
@@ -565,22 +661,42 @@ getch = _Getch()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('Infile',
-                        help="json backup file.")
+    parser.add_argument('SearchTerm', nargs='?',                                   # optional positional argument
+                        help="Print bookmarks tagged with this text (CLI mode).")
+    parser.add_argument('--bookmarks', '-b', action='store_true',
+                        help="Print bookmarks containing or tagged with the SearchTerm (CLI mode).")
     parser.add_argument('--print', '-p', action='store_true',
-                        help="Print bookmark hierarchy (redirect to less or a file).")
+                        help="Print complete bookmark hierarchy (redirect to less or a file) (CLI mode).")
     parser.add_argument('--tags', '-t', type=int, default=-1,
-                        help="Print tags list filtered by tags with a minimum <n> number of uses.  n=0 prints only single use tags.")
+                        help="Print tags list filtered by tags with a minimum <n> number of uses.  n=0 prints only single use tags. (CLI mode)")
     parser.add_argument('--names', '-n', action='store_true',
-                        help="Used with --tags to enable printing the titles/names for each tag.")
+                        help="Used with --tags to enable printing the titles/names for each tag. (CLI mode)")
+    parser.add_argument('--html', type=str,
+                        help=f"Path of html output file.")
+    parser.add_argument('--jsonbackup', '-j', type=str,
+                        help=f"Path to json backup file. Default is newest version at <{JSON_PATH_DEFAULT}xbs_backup*.json>.")
     parser.add_argument('-V', '--version',
                         help="Return version number and exit.",
                         action='version',
                         version='%(prog)s ' + __version__)
     args = parser.parse_args()
 
-    if not os.path.exists(args.Infile):
-        print ("Can't find the input file <{}>".format(args.Infile))
-        exit()
+    infile = args.jsonbackup
+    if infile is None:
+        infile = "__none__"
+        list_of_files = glob.glob(f'{JSON_PATH_DEFAULT}xbs_backup*.json')
+        # if is_Linux:
+        #     list_of_files = glob.glob(f'{JSON_PATH_DEFAULT_LINUX}xbs_backup*.json')
+        # if is_Windows:
+        #     list_of_files = glob.glob(f'{JSON_PATH_DEFAULT_WINDOWS}xbs_backup*.json')
+        # for file in list_of_files:
+        #     print (file)
+        infile = max(list_of_files, key=os.path.getctime)
+        # print ("latest: ", infile)
+        # exit()
+
+    if not os.path.exists(infile):
+        print ("Can't find the input file <{}>".format(infile))
+        sys.exit()
 
     main()
