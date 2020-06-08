@@ -3,12 +3,13 @@
 
 Usages:
   Command line modes:
-    xbsjsonedit news                prints bookmarks tagged with 'news'
-    xbsjsonedit news --bookmarks    prints bookmarks tagged with 'news' and any bookmarks or URLs containing 'news'
-    xbsjsonedit --print             prints all bookmarks with their hierarchy
-    xbsjsonedit --tags 5            prints only tag names that are used at least 5 times
-    xbsjsonedit --tags 5 --names    prints tag names and their bookmarks that are used at least 5 times
-    xbsjsonedit --tags 0 --names    prints tag names and their bookmark that are used exactly 1 time
+    xbsjsonedit news                   prints bookmarks tagged with 'news'
+    xbsjsonedit news --bookmarks       prints bookmarks tagged with 'news' and any bookmarks or URLs containing 'news'
+    xbsjsonedit --print                prints all bookmarks with their hierarchy
+    xbsjsonedit --tags 5               prints only tag names that are used at least 5 times
+    xbsjsonedit --tags 5 --names       prints tag names and their bookmarks that are used at least 5 times
+    xbsjsonedit --tags 0 --names       prints tag names and their bookmark that are used exactly 1 time
+    xbsjsonedit --html <outfile.html>  writes tagged bookmarks to the specified browsable file
 
   Interactive mode:
     xbsjsonedit                     Enters interactive mode
@@ -16,13 +17,13 @@ Usages:
   The path to the xbs_backup*.json file defaults to the newest in the download directory.  --jsonbackup overrides the default.
 """
 
-__version__ = "v1.1 200604"
+__version__ = "v1.1 200608"
 
 #==========================================================
 #
 #  Chris Nelson  2018 - 2020
 #
-# 200604 v1.1   Added cli search features, defaulted .json file to be the newest in download directory.
+# 200608 v1.1   Added cli search and html features, defaulted .json file to be the newest in the download directory.
 # 200330 v1.0   Merged pull request #3 from mblais (add unbuffered getch input; add 'all' option), Reworked --tags and --names switches.
 # 191206 v0.3   Added tags dump
 # 191205 v0.2   Updated to xbrowsersync v1.5 and Python 3.x ONLY
@@ -82,6 +83,45 @@ def main():
         digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="printtree")
         sys.exit()
 
+
+    if args.html is not None:
+        digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="GatherTags")
+        tags_count = 2
+        if args.tags > 0:
+            tags_count = args.tags
+
+        html_fout = io.open (args.html, 'wt')
+        html_fout.write("""<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+    <html>
+    <head>
+      <title>xbs Tags</title>
+    </head>
+
+    <body>
+        <a name="top"></a>
+        <h1>Tagged bookmarks list</h1>
+        """)
+        html_fout.write(f'(Tags used {tags_count} or more times)<br>\n')
+
+        for tag in sorted(tags_dict.keys()):
+            if len(tags_dict[tag]) >= tags_count:
+                html_fout.write(f'        <b><a href="#{tag}">{tag}</a></b><br>\n')
+        html_fout.write("        <br>\n")
+
+        for tag in sorted(tags_dict.keys()):
+            if len(tags_dict[tag]) >= tags_count:
+                html_fout.write(f'        <a name="{tag}"></a><H3>{tag} ({len(tags_dict[tag])}):</H3>\n')
+                html_fout.write('        <BLOCKQUOTE>\n')
+                for bookmark in tags_dict[tag]:
+                    html_fout.write ('        <A HREF="{}" target="_blank">{}</A><BR>\n'.format(bookmark['url'], bookmark['title']))
+                html_fout.write('        <a href="#top">(top)</a>\n')
+                html_fout.write('        </BLOCKQUOTE>\n')
+
+        html_fout.write("    </body> </html>")
+        html_fout.close()
+        sys.exit()
+
+
     if args.tags > -1:
         digin(parent=json_dict["xbrowsersync"]["data"]["bookmarks"], parent_id="", path="/", search_term="", operation="GatherTags")
         for tag in sorted(tags_dict.keys()):
@@ -99,6 +139,7 @@ def main():
                             print ("    {:<4} - {}".format(bookmark["id"], bookmark["title"]))
                         print()
         sys.exit()
+
 
     if args.SearchTerm is not None:
         _search_term = args.SearchTerm.lower()
@@ -219,10 +260,8 @@ Options:
             print ("\nMatches: {}  Deletes: {}\n".format(match_cnt, change_cnt))
 
         elif select == 'w':
-            # ans = prompt_long("Output file name (default <{}>: ".format(args.Infile + OFILESUFFIX))
             ans = prompt_long("Output file name (default <{}>: ".format(infile + OFILESUFFIX))
             if ans == "":
-                # ans = args.Infile + OFILESUFFIX
                 ans = infile + OFILESUFFIX
             with io.open(ans, "w", encoding='utf8') as ofile:
                 json.dump(json_dict, ofile, ensure_ascii=False, indent=2)
@@ -396,9 +435,9 @@ def digin(parent, parent_id, path, search_term, operation, commit=False, indent=
                     if item["tags"] != None:
                         for tag in item["tags"]:
                             if tag not in tags_dict:
-                                tags_dict[tag] = [{"title":item["title"], "id":item["id"]}]
+                                tags_dict[tag] = [{"title":item["title"], "id":item["id"], "url":item["url"]}]
                             else:
-                                tags_dict[tag].append({"title":item["title"], "id":item["id"]})
+                                tags_dict[tag].append({"title":item["title"], "id":item["id"], "url":item["url"]})
 
 
 
@@ -632,6 +671,8 @@ if __name__ == '__main__':
                         help="Print tags list filtered by tags with a minimum <n> number of uses.  n=0 prints only single use tags. (CLI mode)")
     parser.add_argument('--names', '-n', action='store_true',
                         help="Used with --tags to enable printing the titles/names for each tag. (CLI mode)")
+    parser.add_argument('--html', type=str,
+                        help=f"Path of html output file.")
     parser.add_argument('--jsonbackup', '-j', type=str,
                         help=f"Path to json backup file. Default is newest version at <{JSON_PATH_DEFAULT}xbs_backup*.json>.")
     parser.add_argument('-V', '--version',
